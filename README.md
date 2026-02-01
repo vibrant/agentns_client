@@ -19,7 +19,7 @@ pip install agentns-client
 Or install from source:
 
 ```bash
-git clone https://github.com/anthropic-claude/agentns_client.git
+git clone https://github.com/vibrant/agentns_client.git
 cd agentns_client
 pip install -e .
 ```
@@ -210,4 +210,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - [AgentNS Website](https://agentns.xyz)
 - [API Documentation](https://agentns.xyz/howtoagents.md)
-- [GitHub Issues](https://github.com/anthropic-claude/agentns_client/issues)
+- [GitHub Issues](https://github.com/vibrant/agentns_client/issues)

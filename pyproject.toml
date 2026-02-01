@@ -33,9 +33,9 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://agentns.xyz"
-Documentation = "https://github.com/anthropic-claude/agentns_client#readme"
-Repository = "https://github.com/anthropic-claude/agentns_client"
-Issues = "https://github.com/anthropic-claude/agentns_client/issues"
+Documentation = "https://github.com/vibrant/agentns_client#readme"
+Repository = "https://github.com/vibrant/agentns_client"
+Issues = "https://github.com/vibrant/agentns_client/issues"
 
 [project.optional-dependencies]
 dev = [
