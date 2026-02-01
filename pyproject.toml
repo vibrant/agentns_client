@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentns-client"
+version = "0.1.0"
+description = "Python client for AgentNS - wallet-based ICANN domain registrar for AI agents"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "AgentNS", email = "hello@agentns.xyz"}
+]
+keywords = ["domains", "dns", "ethereum", "web3", "siwe", "ai-agents", "icann"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: Name Service (DNS)",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "eth-account>=0.13.0",
+    "siwe>=4.4.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.6.0",
+]
+
+[project.urls]
+Homepage = "https://agentns.xyz"
+Documentation = "https://github.com/anthropic-claude/agentns_client#readme"
+Repository = "https://github.com/anthropic-claude/agentns_client"
+Issues = "https://github.com/anthropic-claude/agentns_client/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agentns_client*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
