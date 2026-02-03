@@ -172,6 +172,7 @@ def build_solana_payment_transaction(
     keypair: Keypair,
     to_address: str,
     amount: int,
+    fee_payer: str | None = None,
 ) -> VersionedTransaction:
     """Build a Solana SPL Token transfer transaction for x402.
 
@@ -185,6 +186,7 @@ def build_solana_payment_transaction(
         keypair: Sender's keypair
         to_address: Recipient's wallet address (Base58)
         amount: Amount in smallest units (USDC has 6 decimals)
+        fee_payer: CDP facilitator's fee payer address (will pay tx fees)
 
     Returns:
         Partially signed Solana versioned transaction (V0)
@@ -192,6 +194,9 @@ def build_solana_payment_transaction(
     sender = keypair.pubkey()
     recipient = Pubkey.from_string(to_address)
     mint = Pubkey.from_string(SOLANA_USDC_MINT)
+
+    # Use CDP fee payer if provided, otherwise sender pays fees
+    payer = Pubkey.from_string(fee_payer) if fee_payer else sender
 
     # Derive ATAs
     source_ata = get_associated_token_address(sender, mint)
@@ -223,15 +228,17 @@ def build_solana_payment_transaction(
     ]
 
     # Build V0 message (versioned transaction required by x402)
+    # CDP fee payer is set as the transaction fee payer
     # address_lookup_table_accounts is empty since we don't use lookup tables
     message = MessageV0.try_compile(
-        sender,  # payer
+        payer,  # fee payer (CDP facilitator or sender)
         instructions,  # instructions
         [],  # address_lookup_table_accounts
         blockhash,  # recent_blockhash
     )
 
-    # Create versioned transaction and sign it
+    # Create versioned transaction and partially sign with sender's keypair
+    # CDP facilitator will add their signature for the fee payer
     tx = VersionedTransaction(message, [keypair])
 
     return tx
@@ -241,6 +248,7 @@ def sign_solana_payment(
     keypair: Keypair,
     to_address: str,
     value: str,
+    fee_payer: str | None = None,
 ) -> dict[str, Any]:
     """Sign a Solana USDC payment for x402.
 
@@ -251,6 +259,7 @@ def sign_solana_payment(
         keypair: Solana keypair
         to_address: Payment recipient address
         value: Amount in smallest units (string)
+        fee_payer: CDP facilitator's fee payer address
 
     Returns:
         dict with:
@@ -263,6 +272,7 @@ def sign_solana_payment(
         keypair=keypair,
         to_address=to_address,
         amount=amount,
+        fee_payer=fee_payer,
     )
 
     # Serialize to bytes and encode as base64

@@ -170,11 +170,17 @@ def _build_solana_payment_header(
     """
     from .solana_payment import sign_solana_payment
 
+    # Get fee payer from requirement.extra (provided by CDP facilitator)
+    fee_payer = None
+    if requirement.extra:
+        fee_payer = requirement.extra.get("feePayer")
+
     # Sign Solana payment transaction
     payment_payload = sign_solana_payment(
         keypair=keypair,
         to_address=requirement.payTo,
         value=requirement.maxAmountRequired,
+        fee_payer=fee_payer,
     )
 
     # Build x402 v2 payment structure for Solana
