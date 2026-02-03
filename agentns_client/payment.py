@@ -1,8 +1,13 @@
-"""Payment utilities for x402 protocol - EIP-3009 signing."""
+"""Payment utilities for x402 protocol - EIP-3009 signing.
+
+This module provides EVM (Base mainnet) payment support.
+For Solana support, see solana_payment.py and solana_wallet.py.
+"""
 
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from eth_account import Account
 
@@ -61,7 +66,7 @@ def load_or_create_wallet(wallet_file: Path | str | None = None) -> Account:
         json.dump(data, f, indent=2)
     print(f"Wallet saved to {wallet_path}")
     print(f"Wallet address: {account.address}")
-    print(f"\nFund this wallet with USDC on Base before purchasing domains!")
+    print("\nFund this wallet with USDC on Base before purchasing domains!")
     return account
 
 
@@ -130,3 +135,25 @@ def sign_eip3009_authorization(
             "nonce": nonce,
         },
     }
+
+
+def get_wallet_address(wallet: Account | Any) -> str:
+    """Get address from either EVM Account or Solana Keypair.
+
+    Args:
+        wallet: Either an eth_account.Account or solders.Keypair
+
+    Returns:
+        Wallet address string
+
+    Raises:
+        TypeError: If wallet type is unknown
+    """
+    if hasattr(wallet, "address"):
+        # EVM Account
+        return wallet.address
+    elif hasattr(wallet, "pubkey"):
+        # Solana Keypair
+        return str(wallet.pubkey())
+    else:
+        raise TypeError(f"Unknown wallet type: {type(wallet)}")

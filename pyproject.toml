@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentns-client"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python client for AgentNS - wallet-based ICANN domain registrar for AI agents"
 readme = "README.md"
 license = {text = "MIT"}
@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     {name = "AgentNS", email = "hello@agentns.xyz"}
 ]
-keywords = ["domains", "dns", "ethereum", "web3", "siwe", "ai-agents", "icann"]
+keywords = ["domains", "dns", "ethereum", "solana", "web3", "siwe", "siws", "ai-agents", "icann"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -38,6 +38,10 @@ Repository = "https://github.com/vibrant/agentns_client"
 Issues = "https://github.com/vibrant/agentns_client/issues"
 
 [project.optional-dependencies]
+solana = [
+    "solders>=0.21.0",
+    "base58>=2.1.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",

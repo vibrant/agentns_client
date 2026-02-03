@@ -54,3 +54,5 @@ wallet.json
 # OS
 .DS_Store
 Thumbs.db
+solana_wallet.json
+wallet.json

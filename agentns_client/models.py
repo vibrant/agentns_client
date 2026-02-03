@@ -51,7 +51,7 @@ class RegistrantUpdate(BaseModel):
 
 class RegistrantProfile(BaseModel):
     id: int
-    wallet_address: str
+    wallet_address: str | None = None  # Server doesn't always return this
     name: str
     organization: str | None = None
     street_address: str

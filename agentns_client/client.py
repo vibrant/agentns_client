@@ -1,4 +1,6 @@
-"""Main AgentNS client."""
+"""Main AgentNS client with multi-network support."""
+
+from typing import Any
 
 import httpx
 from eth_account import Account
@@ -19,65 +21,78 @@ from .models import (
     RegistrantProfile,
     RegistrantUpdate,
 )
+from .networks import NetworkType, detect_network
+from .payment import get_wallet_address
+
+# Try to import Solana support (optional dependency)
+try:
+    from solders.keypair import Keypair
+
+    from . import solana_auth as solana_auth_module
+    from .solana_auth import SolanaAuthSession
+
+    SOLANA_AVAILABLE = True
+except ImportError:
+    SOLANA_AVAILABLE = False
+    Keypair = None  # type: ignore
+    SolanaAuthSession = None  # type: ignore
+    solana_auth_module = None  # type: ignore
 
 DEFAULT_BASE_URL = "https://agentns.xyz"
+
+# Type aliases
+WalletType = Account | Any  # Any for Keypair when not imported
+SessionType = AuthSession | Any  # Any for SolanaAuthSession when not imported
 
 
 class AgentNSClient:
     """Client for AgentNS domain registration API.
 
-    Usage:
+    Supports both EVM (Base mainnet) and Solana wallets.
+    Network is auto-detected from wallet address format.
+
+    Usage with EVM wallet:
         from agentns_client import AgentNSClient, load_or_create_wallet
 
-        # Create client with wallet
         account = load_or_create_wallet()
         client = AgentNSClient(account=account)
-
-        # Check domain availability (no auth required)
-        result = client.check_domain("myagent.xyz")
-        print(f"Available: {result.available}, Price: {result.price_usdc}")
-
-        # Login for authenticated operations
         client.login()
+        domain = client.register_domain("myagent.xyz")
 
-        # Create registrant profile (required before registration)
-        client.create_registrant({
-            "name": "Agent Smith",
-            "street_address": "123 AI Street",
-            "city": "San Francisco",
-            "state_province": "CA",
-            "postal_code": "94102",
-            "country_code": "US",
-            "email": "agent@example.com",
-            "phone": "+14155551234",
-        })
+    Usage with Solana wallet:
+        from agentns_client import AgentNSClient
+        from agentns_client.solana_wallet import load_or_create_solana_wallet
 
-        # Register domain (handles x402 payment flow)
-        domain = client.register_domain("myagent.xyz", years=1)
-        print(f"Registered: {domain.domain}")
-
-        # Manage DNS
-        client.add_dns("myagent.xyz", type="A", host="@", value="192.0.2.1")
+        keypair = load_or_create_solana_wallet()
+        client = AgentNSClient(account=keypair)
+        client.login()
+        domain = client.register_domain("myagent.xyz")
     """
 
     def __init__(
         self,
         base_url: str = DEFAULT_BASE_URL,
-        account: Account | None = None,
+        account: WalletType | None = None,
         timeout: float = 60.0,
     ):
         """Initialize AgentNS client.
 
         Args:
             base_url: API base URL
-            account: Ethereum account for auth and payments
+            account: Wallet for auth and payments (EVM Account or Solana Keypair)
             timeout: HTTP timeout in seconds
         """
         self.base_url = base_url.rstrip("/")
         self.account = account
         self.timeout = timeout
-        self._session: AuthSession | None = None
+        self._session: SessionType | None = None
         self._http_client: httpx.Client | None = None
+        self._network_type: NetworkType | None = None
+
+        # Detect network type if account provided
+        if account is not None:
+            address = get_wallet_address(account)
+            self._network_type = detect_network(address)
 
     @property
     def http_client(self) -> httpx.Client:
@@ -87,7 +102,7 @@ class AgentNSClient:
         return self._http_client
 
     @property
-    def session(self) -> AuthSession:
+    def session(self) -> SessionType:
         """Get authenticated session (raises if not logged in)."""
         if self._session is None:
             raise RuntimeError("Not logged in. Call login() first.")
@@ -97,6 +112,18 @@ class AgentNSClient:
     def is_authenticated(self) -> bool:
         """Check if client is authenticated."""
         return self._session is not None and not self._session.is_expired
+
+    @property
+    def network_type(self) -> NetworkType | None:
+        """Get the detected network type (EVM or Solana)."""
+        return self._network_type
+
+    @property
+    def wallet_address(self) -> str | None:
+        """Get the wallet address."""
+        if self.account is None:
+            return None
+        return get_wallet_address(self.account)
 
     def close(self) -> None:
         """Close HTTP client."""
@@ -113,18 +140,32 @@ class AgentNSClient:
     # === Authentication ===
 
     def login(self) -> None:
-        """Authenticate with SIWE.
+        """Authenticate with SIWE (EVM) or SIWS (Solana).
 
+        Network is auto-detected from wallet address format.
         Requires account to be set.
         """
         if self.account is None:
             raise ValueError("No account set. Pass account to constructor.")
 
-        self._session = auth_module.login(
-            self.http_client,
-            self.base_url,
-            self.account,
-        )
+        if self._network_type == NetworkType.SOLANA:
+            if not SOLANA_AVAILABLE:
+                raise ImportError(
+                    "Solana support requires 'solders' and 'base58' packages. "
+                    "Install with: pip install agentns-client[solana]"
+                )
+            self._session = solana_auth_module.solana_login(
+                self.http_client,
+                self.base_url,
+                self.account,
+            )
+        else:
+            # EVM (default)
+            self._session = auth_module.login(
+                self.http_client,
+                self.base_url,
+                self.account,
+            )
 
     # === Registrant ===
 
@@ -164,6 +205,7 @@ class AgentNSClient:
         """Register a domain with x402 payment.
 
         Handles the full payment flow automatically.
+        Payment method is auto-detected (EIP-3009 for EVM, SPL transfer for Solana).
         Requires account and authenticated session.
         """
         if self.account is None:

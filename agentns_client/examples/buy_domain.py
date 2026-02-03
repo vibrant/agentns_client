@@ -3,12 +3,18 @@
 AgentNS Domain Purchase Example
 
 Demonstrates the full domain registration flow using the AgentNS client library.
+Supports both EVM (Base mainnet) and Solana wallets.
 
 Usage:
-    python -m agentns_client.examples.buy_domain <domain>
+    # With EVM wallet (default)
+    python -m agentns_client.examples.buy_domain myagent.xyz
+
+    # With Solana wallet
+    python -m agentns_client.examples.buy_domain myagent.xyz --solana
 
 Examples:
     python -m agentns_client.examples.buy_domain myagent.xyz
+    python -m agentns_client.examples.buy_domain myagent.xyz --solana
     python -m agentns_client.examples.buy_domain myagent.xyz --years 2
     python -m agentns_client.examples.buy_domain myagent.xyz --check-only
     python -m agentns_client.examples.buy_domain myagent --search
@@ -21,6 +27,7 @@ import sys
 
 from agentns_client import (
     AgentNSClient,
+    NetworkType,
     NotFoundError,
     RegistrationFailedError,
     ValidationError,
@@ -51,15 +58,44 @@ def main():
     parser.add_argument("--years", type=int, default=1, help="Years to register (1-10)")
     parser.add_argument("--check-only", action="store_true", help="Only check availability")
     parser.add_argument("--search", action="store_true", help="Search across all TLDs")
+    parser.add_argument(
+        "--solana",
+        action="store_true",
+        help="Use Solana wallet instead of EVM",
+    )
+    parser.add_argument(
+        "--wallet-file",
+        help="Path to wallet file (default: wallet.json or solana_wallet.json)",
+    )
     args = parser.parse_args()
 
-    # Load or create wallet
-    print("Loading wallet...")
-    account = load_or_create_wallet()
-    print(f"Wallet address: {account.address}")
+    # Load wallet based on network choice
+    if args.solana:
+        try:
+            from agentns_client.solana_wallet import load_or_create_solana_wallet
+        except ImportError:
+            print("Error: Solana support requires additional packages.")
+            print("Install with: pip install agentns-client[solana]")
+            sys.exit(1)
+
+        print("Loading Solana wallet...")
+        wallet_file = args.wallet_file or "solana_wallet.json"
+        account = load_or_create_solana_wallet(wallet_file)
+        print(f"Wallet address: {account.pubkey()}")
+        print("Network: Solana")
+    else:
+        print("Loading EVM wallet...")
+        wallet_file = args.wallet_file or "wallet.json"
+        account = load_or_create_wallet(wallet_file)
+        print(f"Wallet address: {account.address}")
+        print("Network: Base (EVM)")
 
     # Create client
     with AgentNSClient(base_url=API_BASE, account=account) as client:
+        # Show detected network
+        network_name = "Solana" if client.network_type == NetworkType.SOLANA else "Base (EVM)"
+        print(f"Detected network: {network_name}")
+
         # Search mode
         if args.search:
             # Extract name without TLD
@@ -93,7 +129,8 @@ def main():
             return
 
         # Login
-        print("\nAuthenticating with SIWE...")
+        auth_method = "SIWS" if client.network_type == NetworkType.SOLANA else "SIWE"
+        print(f"\nAuthenticating with {auth_method}...")
         client.login()
         print("Authenticated successfully")
 
@@ -109,12 +146,15 @@ def main():
 
         # Register domain
         print(f"\nRegistering {args.domain} for {args.years} year(s)...")
-        print("This will sign an EIP-3009 USDC authorization...")
+        if client.network_type == NetworkType.SOLANA:
+            print("This will sign a Solana SPL Token transfer transaction...")
+        else:
+            print("This will sign an EIP-3009 USDC authorization...")
 
         try:
             domain = client.register_domain(args.domain, years=args.years)
-            print(f"\nDomain registered successfully!")
-            print(f"\nDomain details:")
+            print("\nDomain registered successfully!")
+            print("\nDomain details:")
             print(json.dumps(domain.model_dump(), indent=2, default=str))
 
         except NotFoundError as e:
@@ -129,7 +169,7 @@ def main():
             sys.exit(1)
 
         except RegistrationFailedError as e:
-            print(f"\nRegistration failed after payment!")
+            print("\nRegistration failed after payment!")
             print(f"Domain: {e.domain}")
             print(f"Payment TX: {e.payment_tx_hash}")
             print(f"Reason: {e.failure_reason}")
