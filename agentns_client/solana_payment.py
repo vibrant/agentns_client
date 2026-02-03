@@ -12,9 +12,9 @@ from typing import Any
 from solders.hash import Hash
 from solders.instruction import AccountMeta, Instruction
 from solders.keypair import Keypair
-from solders.message import Message
+from solders.message import MessageV0
 from solders.pubkey import Pubkey
-from solders.transaction import Transaction
+from solders.transaction import VersionedTransaction
 
 from .networks import SOLANA_USDC_MINT
 
@@ -127,10 +127,10 @@ def build_solana_payment_transaction(
     to_address: str,
     amount: int,
     recent_blockhash: str | None = None,
-) -> Transaction:
+) -> VersionedTransaction:
     """Build a Solana SPL Token transfer transaction for x402.
 
-    x402 SVM spec requires the following instruction sequence:
+    x402 SVM spec requires versioned transactions (V0) with:
     1. Compute Budget: Set Compute Unit Limit
     2. Compute Budget: Set Compute Unit Price
     3. SPL Token TransferChecked instruction
@@ -142,7 +142,7 @@ def build_solana_payment_transaction(
         recent_blockhash: Optional blockhash (CDP will use a valid one)
 
     Returns:
-        Partially signed Solana transaction (CDP facilitator adds their signature)
+        Partially signed Solana versioned transaction (V0)
     """
     sender = keypair.pubkey()
     recipient = Pubkey.from_string(to_address)
@@ -176,16 +176,17 @@ def build_solana_payment_transaction(
     else:
         blockhash = Hash.from_string(recent_blockhash)
 
-    # Build message and transaction
-    message = Message.new_with_blockhash(
-        instructions,
-        sender,
-        blockhash,
+    # Build V0 message (versioned transaction required by x402)
+    # address_lookup_table_accounts is empty since we don't use lookup tables
+    message = MessageV0.try_compile(
+        sender,  # payer
+        instructions,  # instructions
+        [],  # address_lookup_table_accounts
+        blockhash,  # recent_blockhash
     )
 
-    # Create and sign transaction (partially signed - facilitator adds their sig)
-    tx = Transaction.new_unsigned(message)
-    tx.sign([keypair], blockhash)
+    # Create versioned transaction and sign it
+    tx = VersionedTransaction(message, [keypair])
 
     return tx
 
