@@ -4,11 +4,14 @@ x402 SVM specification requires:
 1. Compute Budget: Set Compute Unit Limit
 2. Compute Budget: Set Compute Unit Price
 3. SPL Token TransferChecked instruction
+4. Memo instruction with random nonce
 """
 
 import base64
+import secrets
 from typing import Any
 
+import httpx
 from solders.hash import Hash
 from solders.instruction import AccountMeta, Instruction
 from solders.keypair import Keypair
@@ -17,6 +20,12 @@ from solders.pubkey import Pubkey
 from solders.transaction import VersionedTransaction
 
 from .networks import SOLANA_USDC_MINT
+
+# Memo Program ID
+MEMO_PROGRAM_ID = Pubkey.from_string("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")
+
+# Solana RPC endpoint
+SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
 
 # SPL Token Program ID
 TOKEN_PROGRAM_ID = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
@@ -66,6 +75,43 @@ def create_set_compute_unit_limit_instruction(units: int) -> Instruction:
     # Followed by u32 units (little endian)
     data = bytes([2]) + units.to_bytes(4, "little")
     return Instruction(COMPUTE_BUDGET_PROGRAM_ID, data, [])
+
+
+def create_memo_instruction(nonce: str) -> Instruction:
+    """Create a memo instruction with a nonce.
+
+    x402 SVM requires a memo instruction with a random nonce for uniqueness.
+
+    Args:
+        nonce: Hex-encoded random nonce
+
+    Returns:
+        Memo program instruction
+    """
+    # Memo instruction just has the message as data, no accounts needed
+    data = nonce.encode("utf-8")
+    return Instruction(MEMO_PROGRAM_ID, data, [])
+
+
+def get_recent_blockhash() -> Hash:
+    """Fetch a recent blockhash from Solana RPC.
+
+    Returns:
+        Recent blockhash
+    """
+    response = httpx.post(
+        SOLANA_RPC_URL,
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getLatestBlockhash",
+            "params": [{"commitment": "finalized"}],
+        },
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    result = response.json()["result"]["value"]["blockhash"]
+    return Hash.from_string(result)
 
 
 def create_set_compute_unit_price_instruction(micro_lamports: int) -> Instruction:
@@ -126,7 +172,6 @@ def build_solana_payment_transaction(
     keypair: Keypair,
     to_address: str,
     amount: int,
-    recent_blockhash: str | None = None,
 ) -> VersionedTransaction:
     """Build a Solana SPL Token transfer transaction for x402.
 
@@ -134,12 +179,12 @@ def build_solana_payment_transaction(
     1. Compute Budget: Set Compute Unit Limit
     2. Compute Budget: Set Compute Unit Price
     3. SPL Token TransferChecked instruction
+    4. Memo instruction with random nonce
 
     Args:
         keypair: Sender's keypair
         to_address: Recipient's wallet address (Base58)
         amount: Amount in smallest units (USDC has 6 decimals)
-        recent_blockhash: Optional blockhash (CDP will use a valid one)
 
     Returns:
         Partially signed Solana versioned transaction (V0)
@@ -151,6 +196,12 @@ def build_solana_payment_transaction(
     # Derive ATAs
     source_ata = get_associated_token_address(sender, mint)
     dest_ata = get_associated_token_address(recipient, mint)
+
+    # Generate random nonce for memo (16 bytes as hex)
+    nonce = secrets.token_hex(16)
+
+    # Fetch recent blockhash from Solana RPC
+    blockhash = get_recent_blockhash()
 
     # Build instruction sequence per x402 SVM spec
     instructions = [
@@ -167,14 +218,9 @@ def build_solana_payment_transaction(
             amount=amount,
             decimals=USDC_DECIMALS,
         ),
+        # 4. Memo instruction with random nonce for uniqueness
+        create_memo_instruction(nonce),
     ]
-
-    # Use a placeholder blockhash if not provided
-    # CDP facilitator will handle the actual blockhash
-    if recent_blockhash is None:
-        blockhash = Hash.default()
-    else:
-        blockhash = Hash.from_string(recent_blockhash)
 
     # Build V0 message (versioned transaction required by x402)
     # address_lookup_table_accounts is empty since we don't use lookup tables
