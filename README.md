@@ -4,8 +4,9 @@ Python client library for [AgentNS](https://agentns.xyz) - a wallet-based ICANN 
 
 ## Features
 
-- **Wallet Authentication**: Sign-In With Ethereum (SIWE) authentication
-- **Domain Registration**: Full x402 payment protocol support with USDC on Base
+- **Multi-Chain Support**: EVM (Base) and Solana wallets
+- **Wallet Authentication**: SIWE (Ethereum) and SIWS (Solana) authentication
+- **Domain Registration**: Full x402 payment protocol support with USDC
 - **DNS Management**: Create, update, delete DNS records
 - **Nameserver Management**: Configure custom nameservers
 - **Type Safety**: Full Pydantic models for all API types
@@ -16,20 +17,28 @@ Python client library for [AgentNS](https://agentns.xyz) - a wallet-based ICANN 
 pip install agentns-client
 ```
 
+For Solana support:
+
+```bash
+pip install agentns-client[solana]
+```
+
 Or install from source:
 
 ```bash
 git clone https://github.com/vibrant/agentns_client.git
 cd agentns_client
-pip install -e .
+pip install -e ".[solana]"
 ```
 
 ## Quick Start
 
+### EVM (Base) Wallet
+
 ```python
 from agentns_client import AgentNSClient, load_or_create_wallet
 
-# Create or load wallet
+# Create or load EVM wallet
 account = load_or_create_wallet()
 print(f"Wallet: {account.address}")
 
@@ -47,6 +56,23 @@ for r in results:
         print(f"{r.domain}: ${r.price_usdc}")
 ```
 
+### Solana Wallet
+
+```python
+from agentns_client import AgentNSClient, load_or_create_solana_wallet
+
+# Create or load Solana wallet
+keypair = load_or_create_solana_wallet()
+print(f"Wallet: {keypair.pubkey()}")
+
+# Create client (auto-detects Solana)
+client = AgentNSClient(account=keypair)
+
+# Same API as EVM
+result = client.check_domain("myagent.xyz")
+print(f"Available: {result.available}, Price: ${result.price_usdc} USDC")
+```
+
 ## Full Registration Flow
 
 ```python
@@ -61,7 +87,7 @@ with AgentNSClient(account=account) as client:
         print("Domain not available")
         exit(1)
 
-    # 2. Authenticate with SIWE
+    # 2. Authenticate (SIWE for EVM, SIWS for Solana)
     client.login()
 
     # 3. Create registrant profile (required by ICANN)
@@ -124,10 +150,20 @@ client.set_nameservers("myagent.xyz", [
 ### AgentNSClient
 
 ```python
+# EVM wallet
+from eth_account import Account
 client = AgentNSClient(
     base_url="https://agentns.xyz",  # API base URL
-    account=account,                   # eth_account.Account
-    timeout=60.0,                      # HTTP timeout
+    account=account,                  # eth_account.Account
+    timeout=60.0,                     # HTTP timeout
+)
+
+# Solana wallet
+from solders.keypair import Keypair
+client = AgentNSClient(
+    base_url="https://agentns.xyz",
+    account=keypair,                  # solders.Keypair
+    timeout=60.0,
 )
 ```
 
@@ -142,7 +178,7 @@ client = AgentNSClient(
 
 | Method | Description |
 |--------|-------------|
-| `login()` | Authenticate with SIWE |
+| `login()` | Authenticate with SIWE/SIWS |
 | `get_registrant()` | Get registrant profile |
 | `create_registrant(data)` | Create registrant profile |
 | `update_registrant(data)` | Update registrant profile |
@@ -173,26 +209,38 @@ from agentns_client import (
 ### Wallet Utilities
 
 ```python
+# EVM wallets
 from agentns_client import load_wallet, load_or_create_wallet
 
-# Load existing wallet (fails if not found)
-account = load_wallet("path/to/wallet.json")
+account = load_wallet("path/to/wallet.json")           # Load existing
+account = load_or_create_wallet("path/to/wallet.json") # Load or create
 
-# Load or create new wallet
-account = load_or_create_wallet("path/to/wallet.json")
+# Solana wallets
+from agentns_client import load_solana_wallet, load_or_create_solana_wallet
+
+keypair = load_solana_wallet("path/to/wallet.json")           # Load existing
+keypair = load_or_create_solana_wallet("path/to/wallet.json") # Load or create
 ```
 
 ## Payment Details
 
 AgentNS uses the [x402 protocol](https://www.x402.org/) for payments:
 
-- **Currency**: USDC on Base (Chain ID: 8453)
+### EVM (Base)
+- **Network**: Base (Chain ID: 8453)
+- **Currency**: USDC
 - **Contract**: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
 - **Method**: EIP-3009 `transferWithAuthorization`
 
+### Solana
+- **Network**: Solana Mainnet
+- **Currency**: USDC
+- **Mint**: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
+- **Method**: SPL Token `TransferChecked`
+
 The client handles the full payment flow automatically:
 1. Request returns 402 with payment requirement
-2. Client signs EIP-3009 authorization
+2. Client signs authorization (EIP-3009 for EVM, SPL transfer for Solana)
 3. Client resubmits with X-PAYMENT header
 4. Domain is registered atomically with payment
 

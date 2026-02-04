@@ -46,7 +46,7 @@ DEFAULT_REGISTRANT = {
     "state_province": "CA",
     "postal_code": "94102",
     "country_code": "US",
-    "email": "agent@example.com",
+    "email": "contact@agentns.xyz",
     "phone": "+14155551234",
     "whois_privacy": True,
 }
