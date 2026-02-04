@@ -10,7 +10,7 @@ from siwe import SiweMessage
 
 from .exceptions import AuthenticationError
 from .models import TokenResponse
-from .payment import CHAIN_ID
+from .networks import EVM_CHAIN_ID
 
 
 @dataclass
@@ -73,7 +73,7 @@ def create_siwe_message(
         statement=statement,
         uri=uri,
         version="1",
-        chain_id=CHAIN_ID,
+        chain_id=EVM_CHAIN_ID,
         nonce=nonce,
         issued_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     )

@@ -34,20 +34,20 @@ class EvmSignerAdapter:
 
         Adapts x402's interface to eth_account's sign_typed_data method.
         """
-        # Convert domain to eth_account format
+        # Convert domain dataclass to eth_account format
         domain_data = {
-            "name": domain.get("name"),
-            "version": domain.get("version"),
-            "chainId": domain.get("chainId"),
-            "verifyingContract": domain.get("verifyingContract"),
+            "name": domain.name,
+            "version": domain.version,
+            "chainId": domain.chain_id,
+            "verifyingContract": domain.verifying_contract,
         }
         # Remove None values
         domain_data = {k: v for k, v in domain_data.items() if v is not None}
 
-        # Convert types to eth_account format
+        # Convert TypedDataField dataclasses to eth_account format
         types_data = {}
         for type_name, fields in types.items():
-            types_data[type_name] = [{"name": f["name"], "type": f["type"]} for f in fields]
+            types_data[type_name] = [{"name": f.name, "type": f.type} for f in fields]
 
         signed = self._account.sign_typed_data(
             domain_data,

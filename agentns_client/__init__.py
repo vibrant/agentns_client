@@ -55,12 +55,9 @@ from .networks import (
     is_solana_address,
 )
 from .payment import (
-    CHAIN_ID,
-    USDC_CONTRACT,
     get_wallet_address,
     load_or_create_wallet,
     load_wallet,
-    sign_eip3009_authorization,
 )
 
 # Solana exports (optional - only if solders is installed)
@@ -71,7 +68,6 @@ try:
         create_siws_message,
         sign_solana_message,
     )
-    from .solana_payment import sign_solana_payment  # noqa: F401
     from .solana_wallet import (  # noqa: F401
         get_solana_address,
         load_or_create_solana_wallet,
@@ -85,7 +81,6 @@ try:
         "SolanaAuthSession",
         "create_siws_message",
         "sign_solana_message",
-        "sign_solana_payment",
     ]
 except ImportError:
     pass
@@ -126,11 +121,8 @@ __all__ = [
     "EVM_CAIP2_ID",
     "SOLANA_USDC_MINT",
     "SOLANA_CAIP2_ID",
-    # EVM payment utilities (backward compat)
+    # Wallet utilities
     "load_wallet",
     "load_or_create_wallet",
-    "sign_eip3009_authorization",
     "get_wallet_address",
-    "CHAIN_ID",
-    "USDC_CONTRACT",
 ] + _SOLANA_EXPORTS

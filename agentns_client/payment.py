@@ -1,7 +1,7 @@
-"""Payment utilities for x402 protocol - EIP-3009 signing.
+"""Wallet utilities for AgentNS.
 
-This module provides EVM (Base mainnet) payment support.
-For Solana support, see solana_payment.py and solana_wallet.py.
+This module provides wallet loading and management functions.
+Payment signing is handled by the x402 library via x402_client.py.
 """
 
 import json
@@ -11,16 +11,7 @@ from typing import Any
 
 from eth_account import Account
 
-# Constants
-CHAIN_ID = 8453  # Base mainnet
-USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 DEFAULT_WALLET_FILE = Path.cwd() / "wallet.json"
-
-# EIP-712 domain for USDC on Base
-USDC_EIP712_DOMAIN = {
-    "name": "USD Coin",
-    "version": "2",
-}
 
 
 def load_wallet(wallet_file: Path | str | None = None) -> Account:
@@ -68,73 +59,6 @@ def load_or_create_wallet(wallet_file: Path | str | None = None) -> Account:
     print(f"Wallet address: {account.address}")
     print("\nFund this wallet with USDC on Base before purchasing domains!")
     return account
-
-
-def sign_eip3009_authorization(
-    account: Account,
-    to_address: str,
-    value: str,
-    valid_after: int,
-    valid_before: int,
-    nonce: str,
-) -> dict:
-    """Sign EIP-3009 transferWithAuthorization.
-
-    Args:
-        account: Ethereum account to sign with
-        to_address: Recipient address
-        value: Amount in smallest unit (string)
-        valid_after: Unix timestamp (int)
-        valid_before: Unix timestamp (int)
-        nonce: 32-byte nonce as hex string (0x...)
-
-    Returns:
-        dict with:
-        - signature: "0x..." prefixed hex string
-        - authorization: dict with from, to, value, validAfter (str), validBefore (str), nonce
-    """
-    domain_data = {
-        "name": USDC_EIP712_DOMAIN["name"],
-        "version": USDC_EIP712_DOMAIN["version"],
-        "chainId": CHAIN_ID,
-        "verifyingContract": USDC_CONTRACT,
-    }
-
-    message_data = {
-        "from": account.address,
-        "to": to_address,
-        "value": int(value),
-        "validAfter": valid_after,
-        "validBefore": valid_before,
-        "nonce": bytes.fromhex(nonce[2:] if nonce.startswith("0x") else nonce),
-    }
-
-    signed = account.sign_typed_data(
-        domain_data,
-        {
-            "TransferWithAuthorization": [
-                {"name": "from", "type": "address"},
-                {"name": "to", "type": "address"},
-                {"name": "value", "type": "uint256"},
-                {"name": "validAfter", "type": "uint256"},
-                {"name": "validBefore", "type": "uint256"},
-                {"name": "nonce", "type": "bytes32"},
-            ]
-        },
-        message_data,
-    )
-
-    return {
-        "signature": "0x" + signed.signature.hex(),
-        "authorization": {
-            "from": account.address,
-            "to": to_address,
-            "value": value,
-            "validAfter": str(valid_after),
-            "validBefore": str(valid_before),
-            "nonce": nonce,
-        },
-    }
 
 
 def get_wallet_address(wallet: Account | Any) -> str:

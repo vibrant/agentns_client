@@ -1,10 +1,7 @@
 """Domain operations for AgentNS."""
 
 import base64
-import json
-import secrets
-import time
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Union
 
 import httpx
 from eth_account import Account
@@ -16,9 +13,8 @@ from .exceptions import (
     RegistrationFailedError,
     ValidationError,
 )
-from .models import DomainCheck, DomainInfo, DomainSearchResult, PaymentRequired
-from .networks import EVM_CAIP2_ID, SOLANA_CAIP2_ID, NetworkType, detect_network
-from .payment import get_wallet_address, sign_eip3009_authorization
+from .models import DomainCheck, DomainInfo, DomainSearchResult
+from .x402_client import build_payment_header
 
 if TYPE_CHECKING:
     from solders.keypair import Keypair
@@ -92,119 +88,12 @@ def list_domains(client: httpx.Client, session: SessionType) -> list[DomainInfo]
     return [DomainInfo(**d) for d in data["domains"]]
 
 
-def _parse_payment_requirement(response: httpx.Response) -> PaymentRequired:
-    """Parse X-PAYMENT-REQUIRED header."""
+def _get_payment_required_data(response: httpx.Response) -> bytes:
+    """Extract payment required data from X-PAYMENT-REQUIRED header."""
     header = response.headers.get("X-PAYMENT-REQUIRED")
     if not header:
         raise ValueError("No X-PAYMENT-REQUIRED header in 402 response")
-    decoded = json.loads(base64.b64decode(header))
-    return PaymentRequired(**decoded)
-
-
-def _build_payment_header(
-    wallet: WalletType,
-    requirement: PaymentRequired,
-) -> str:
-    """Build X-PAYMENT header with signed authorization/transaction.
-
-    Handles both EVM (EIP-3009) and Solana (serialized transaction) payments.
-
-    Args:
-        wallet: Wallet for signing (Account or Keypair)
-        requirement: Payment requirement from server
-
-    Returns:
-        Base64-encoded X-PAYMENT header value
-    """
-    wallet_address = get_wallet_address(wallet)
-    network_type = detect_network(wallet_address)
-
-    if network_type == NetworkType.EVM:
-        return _build_evm_payment_header(wallet, requirement)
-    else:
-        return _build_solana_payment_header(wallet, requirement)
-
-
-def _build_evm_payment_header(
-    account: Account,
-    requirement: PaymentRequired,
-) -> str:
-    """Build X-PAYMENT header for EVM (EIP-3009 authorization)."""
-    # Generate authorization nonce
-    auth_nonce = "0x" + secrets.token_hex(32)
-    valid_after = 0
-    valid_before = int(time.time()) + requirement.maxTimeoutSeconds
-
-    # Sign EIP-3009 authorization
-    payment_payload = sign_eip3009_authorization(
-        account=account,
-        to_address=requirement.payTo,
-        value=requirement.maxAmountRequired,
-        valid_after=valid_after,
-        valid_before=valid_before,
-        nonce=auth_nonce,
-    )
-
-    # Build X-PAYMENT structure
-    x_payment = {
-        "x402Version": 1,
-        "scheme": "exact",
-        "network": EVM_CAIP2_ID,
-        "payload": payment_payload,
-    }
-
-    return base64.b64encode(json.dumps(x_payment).encode()).decode()
-
-
-def _build_solana_payment_header(
-    keypair: Any,  # Keypair type, but avoiding import
-    requirement: PaymentRequired,
-) -> str:
-    """Build X-PAYMENT header for Solana (serialized transaction).
-
-    Solana x402 uses version 2 format which requires:
-    - x402Version: 2
-    - resource: URL/description/mimeType of the protected resource
-    - accepted: The payment requirements the client accepted
-    - payload: Contains the base64-encoded partially-signed transaction
-    """
-    from .solana_payment import sign_solana_payment
-
-    # Get fee payer from requirement.extra (provided by CDP facilitator)
-    fee_payer = None
-    if requirement.extra:
-        fee_payer = requirement.extra.get("feePayer")
-
-    # Sign Solana payment transaction
-    payment_payload = sign_solana_payment(
-        keypair=keypair,
-        to_address=requirement.payTo,
-        value=requirement.maxAmountRequired,
-        fee_payer=fee_payer,
-    )
-
-    # Build x402 v2 payment structure for Solana
-    # The 'accepted' field mirrors the payment requirements
-    x_payment = {
-        "x402Version": 2,
-        "resource": {
-            "url": requirement.resource,
-            "description": requirement.description,
-            "mimeType": requirement.mimeType,
-        },
-        "accepted": {
-            "scheme": requirement.scheme,
-            "network": requirement.network,
-            "maxAmountRequired": requirement.maxAmountRequired,
-            "asset": requirement.asset,
-            "payTo": requirement.payTo,
-            "maxTimeoutSeconds": requirement.maxTimeoutSeconds,
-            "extra": requirement.extra,
-        },
-        "payload": payment_payload,
-    }
-
-    return base64.b64encode(json.dumps(x_payment).encode()).decode()
+    return base64.b64decode(header)
 
 
 def register_domain(
@@ -272,9 +161,9 @@ def register_domain(
     if response.status_code != 402:
         response.raise_for_status()
 
-    # Phase 2: Parse payment requirement and sign
-    requirement = _parse_payment_requirement(response)
-    payment_header = _build_payment_header(wallet, requirement)
+    # Phase 2: Parse payment requirement and sign using x402 library
+    payment_required_data = _get_payment_required_data(response)
+    payment_header = build_payment_header(wallet, payment_required_data)
 
     # Phase 3: Resubmit with payment
     headers = {**session.headers, "X-PAYMENT": payment_header}
