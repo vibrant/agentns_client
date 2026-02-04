@@ -396,5 +396,5 @@ def build_payment_header(
     client = create_x402_client(wallet)
     payment_payload = client.create_payment_payload(payment_required)
 
-    # Serialize to JSON and base64 encode
-    return base64.b64encode(payment_payload.model_dump_json().encode()).decode()
+    # Serialize to JSON and base64 encode (by_alias=True for camelCase field names)
+    return base64.b64encode(payment_payload.model_dump_json(by_alias=True).encode()).decode()
